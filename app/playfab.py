@@ -40,15 +40,6 @@ class PlayFab:
     async def get_catalog(self, version: str):
         return await self.call("Admin", "GetCatalogItems", {"CatalogVersion": version})
 
-    async def get_all_segments(self):
-        return await self.call("Admin", "GetAllSegments", {})
-
-    async def get_players_in_segment(self, segment_id: str, continuation_token=None, max_batch_size=10000):
-        body = {"SegmentId": segment_id, "MaxBatchSize": max_batch_size, "SecondsToLive": 1800}
-        if continuation_token:
-            body["ContinuationToken"] = continuation_token
-        return await self.call("Admin", "GetPlayersInSegment", body)
-
     async def get_account(self, playfab_id=None, username=None, display_name=None):
         body = {}
         if playfab_id:
