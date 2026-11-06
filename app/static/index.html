@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>BOINGUS Admin</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="brand"><div class="brand-mark">B</div><div><b>BOINGUS</b><small>ADMIN CONSOLE</small></div></div>
+    <div class="nav-label">WORKSPACE</div>
+    <button class="nav-item active" data-page="home"><span>⌂</span>Home</button>
+    <button class="nav-item" data-page="bans"><span>◉</span>Concurrent Bans</button>
+    <button class="nav-item" data-page="reports"><span>⚑</span>Recent Reports</button>
+    <button class="nav-item" data-page="lookup"><span>⌕</span>User Lookup</button>
+    <button class="nav-item" data-page="catalog"><span>▦</span>Catalog</button>
+    <button class="nav-item" data-page="title"><span>⚙</span>Title Data</button>
+    <div class="nav-label priority-label">REPORTS BY PRIORITY MEMBER <span class="chevron">⌄</span></div>
+    <div class="priority-links">
+      <button class="priority-link" data-priority="Owner"><i class="owner"></i>Owners Reports</button>
+      <button class="priority-link" data-priority="Staff"><i class="staff"></i>Staff Reports</button>
+      <button class="priority-link" data-priority="Moderator"><i class="moderator"></i>Moderator Reports</button>
+      <button class="priority-link" data-priority="Trial Moderator"><i class="trial"></i>Trial Moderator Reports</button>
+    </div>
+    <div class="sidebar-bottom"><div class="connection-dot"></div><span id="connection-label">Connecting locally…</span><small>LOCAL INSTANCE · 127.0.0.1</small></div>
+  </aside>
+  <main class="main">
+    <header class="topbar"><div><div class="eyebrow">BOINGUS / MODERATION</div><h1 id="page-title">Home</h1></div><div class="top-actions"><span class="live-pill"><i></i>LOCAL</span><div class="avatar">A</div></div></header>
+    <section id="page-home" class="page active">
+      <div class="welcome-row"><div><h2>Moderation overview</h2><p>Your BOINGUS moderation activity at a glance.</p></div><button class="button secondary" id="refresh-home">↻ Refresh</button></div>
+      <div class="stats-grid">
+        <article class="stat-card"><div class="stat-top"><span>ALL REPORTS</span><span class="stat-icon purple">⚑</span></div><strong id="stat-total">—</strong><small>Stored in local archive</small></article>
+        <article class="stat-card"><div class="stat-top"><span>PENDING REPORTS</span><span class="stat-icon amber">◷</span></div><strong id="stat-pending">—</strong><small>Awaiting review</small></article>
+        <article class="stat-card"><div class="stat-top"><span>PLAYFAB</span><span class="stat-icon blue">◆</span></div><strong id="stat-playfab">—</strong><small id="stat-playfab-sub">Connection configuration</small></article>
+        <article class="stat-card"><div class="stat-top"><span>PRIORITY QUEUE</span><span class="stat-icon red">!</span></div><strong id="stat-priority">—</strong><small>Elevated-role reports</small></article>
+      </div>
+      <div class="content-grid">
+        <article class="panel"><div class="panel-heading"><div><h3>Recent reports</h3><p>Latest reports in the local archive</p></div><button class="text-button" data-goto="reports">View all →</button></div><div id="recent-reports" class="empty-state">No locally synchronized reports yet.</div></article>
+        <article class="panel system-panel"><div class="panel-heading"><div><h3>System status</h3><p>Local services and integrations</p></div></div><div class="status-row"><span>Local backend</span><b class="status-good">● Online</b></div><div class="status-row"><span>WebSocket</span><b id="ws-status">Connecting</b></div><div class="status-row"><span>PlayFab</span><b id="pf-status">Not configured</b></div><div class="status-row"><span>Catalog version</span><b id="catalog-version">—</b></div></article>
+      </div>
+      <div class="notice"><span>ⓘ</span><div><b>First-run setup</b><p>Connect your PlayFab Title ID and Developer Secret Key in the local <code>.env</code> file. The key stays on this PC and is never sent to the browser.</p></div></div>
+    </section>
+    <section id="page-bans" class="page"><div class="page-intro"><h2>Concurrent bans</h2><p>Active bans will be indexed here as the moderation backend is connected.</p></div><div class="panel empty-state">The global ban index is part of the next backend stage. Individual player ban history can already be queried from PlayFab by PlayFab ID.</div></section>
+    <section id="page-reports" class="page"><div class="page-intro"><h2>Recent reports</h2><p>Reports synchronized from CloudScript and stored locally.</p></div><div id="all-reports" class="panel empty-state">No reports in the local archive yet.</div></section>
+    <section id="page-lookup" class="page"><div class="page-intro"><h2>User lookup</h2><p>Search by PlayFab ID or PlayFab username.</p></div><div id="player-search-view" class="panel"><div class="search-row"><input id="player-query" autocomplete="off" placeholder="Start typing a PlayFab ID or username (3+ characters)"><button class="button primary" id="player-search">Search player</button></div><div id="player-results" class="player-results"></div><div class="empty-state">Select a matching account to open its full information page.</div></div><div id="player-detail-view" class="player-detail-view" hidden><button class="button secondary back-button" id="player-back" type="button">← Back to search</button><div id="player-result" class="empty-state">Loading player information…</div></div></section>
+    <section id="page-catalog" class="page"><div class="page-intro"><h2>Catalog</h2><p>Manage the existing legacy catalog used by BOINGUS.</p></div><div class="panel"><div class="panel-heading"><div><h3>Catalog items</h3><p id="catalog-subtitle">Read-only preview in this first stage.</p></div><button class="button secondary" id="load-catalog">↻ Load catalog</button></div><div id="catalog-list" class="empty-state">Load catalog items from PlayFab.</div></div></section>
+    <section id="page-title" class="page"><div class="page-intro"><h2>Title Data</h2><p>Update game-wide settings without publishing a Unity build.</p></div><div class="panel form-panel"><div class="field"><label for="motd">MOTD</label><textarea id="motd" rows="4" placeholder="Welcome message shown in-game"></textarea></div><div class="field"><label for="game-version">GameVersion</label><input id="game-version" placeholder="1.0.0"></div><div class="form-footer"><span id="title-save-status" class="muted">Loads from PlayFab when configured.</span><button class="button primary" id="save-title">Save Title Data</button></div></div></section>
+    <footer>BOINGUS ADMIN <span>LOCAL MODERATION CONSOLE</span></footer>
+  </main>
+</div>
+<script src="/static/app.js"></script>
+</body></html>
