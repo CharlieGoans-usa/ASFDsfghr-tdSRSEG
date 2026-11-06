@@ -55,8 +55,31 @@ def initialize():
         """)
 
 def save_report(report: dict):
+    """
+    Insert or update a report. Returns True only when the stored report
+    is new or its contents have changed, allowing callers to avoid
+    unnecessary WebSocket notifications on every polling cycle.
+    """
+    report_id = report.get("reportID")
+    target_id = report.get("targetPlayFabID")
+    if not report_id or not target_id:
+        return False
+
     now = datetime.now(timezone.utc).isoformat()
+    raw_json = json.dumps(report, ensure_ascii=False, sort_keys=True)
     with connect() as db:
+        existing = db.execute(
+            "SELECT raw_json FROM reports WHERE report_id=?",
+            (report_id,)
+        ).fetchone()
+
+        if existing:
+            try:
+                if json.loads(existing["raw_json"]) == report:
+                    return False
+            except (TypeError, ValueError):
+                pass
+
         db.execute("""
         INSERT INTO reports (
             report_id,target_playfab_id,target_username,reporter_playfab_id,
@@ -64,14 +87,27 @@ def save_report(report: dict):
             raw_json,synced_at
         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
         ON CONFLICT(report_id) DO UPDATE SET
-            status=excluded.status, raw_json=excluded.raw_json, synced_at=excluded.synced_at
+            target_playfab_id=excluded.target_playfab_id,
+            target_username=excluded.target_username,
+            reporter_playfab_id=excluded.reporter_playfab_id,
+            reporter_rank=excluded.reporter_rank,
+            reason=excluded.reason,
+            priority=excluded.priority,
+            status=excluded.status,
+            timestamp=excluded.timestamp,
+            lobby_id=excluded.lobby_id,
+            photon_region=excluded.photon_region,
+            raw_json=excluded.raw_json,
+            synced_at=excluded.synced_at
         """, (
-            report.get("reportID"), report.get("targetPlayFabID"), report.get("targetUsername"),
-            report.get("reporterPlayFabID"), report.get("reporterRank"), report.get("reason"),
-            report.get("priority"), report.get("status", "Pending"), report.get("timestamp"),
+            report_id, target_id, report.get("targetUsername"),
+            report.get("reporterPlayFabID"), report.get("reporterRank"),
+            report.get("reason"), report.get("priority"),
+            report.get("status", "Pending"), report.get("timestamp"),
             report.get("lobbyID"), report.get("photonRegion"),
-            json.dumps(report), now
+            raw_json, now
         ))
+    return True
 
 def report_stats():
     with connect() as db:
