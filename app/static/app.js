@@ -1,12 +1,13 @@
 const $ = (id) => document.getElementById(id);
 let socket;
+let activeReportPriority = null;
 
 function setPage(name, title) {
   document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
   const page = $("page-" + name);
   if (page) page.classList.add("active");
   document.querySelectorAll(".nav-item").forEach(b => b.classList.toggle("active", b.dataset.page === name));
-  $("page-title").textContent = title || ({home:"Home",bans:"Concurrent Bans",reports:"Recent Reports",lookup:"User Lookup",catalog:"Catalog",title:"Title Data"}[name] || name);
+  $("page-title").textContent = title || ({home:"Home",reports:"Recent Reports",lookup:"User Lookup",catalog:"Catalog",title:"Title Data"}[name] || name);
 }
 document.querySelectorAll(".nav-item").forEach(b => b.addEventListener("click", () => {
   setPage(b.dataset.page);
@@ -46,7 +47,8 @@ async function loadHome() {
     $("catalog-version").textContent = d.catalog_version || "—";
   } catch(e) { console.error(e); }
 }
-async function loadReports(priority=null) {
+async function loadReports(priority=activeReportPriority) {
+  activeReportPriority = priority;
   try {
     const d = await api("/api/reports?limit=250");
     let rows = d.reports || [];
@@ -184,7 +186,14 @@ function connectSocket() {
   socket = new WebSocket(`${scheme}://${location.host}/ws`);
   socket.onopen = () => { $("ws-status").textContent = "Connected"; $("ws-status").className = "status-good"; $("connection-label").textContent = "Local backend connected"; };
   socket.onclose = () => { $("ws-status").textContent = "Disconnected"; $("connection-label").textContent = "Reconnecting…"; setTimeout(connectSocket, 1800); };
-  socket.onmessage = e => { const m = JSON.parse(e.data); if (m.type === "reports_changed") { loadHome(); loadReports(); } };
+  socket.onmessage = e => {
+    let m;
+    try { m = JSON.parse(e.data); } catch { return; }
+    if (m.type === "reports_changed") {
+      loadHome();
+      loadReports(activeReportPriority);
+    }
+  };
 }
 loadHome();
 connectSocket();
