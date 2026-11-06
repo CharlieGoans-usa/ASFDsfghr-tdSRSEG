@@ -1,8 +1,6 @@
 import os
 import json
 import asyncio
-import uuid
-import re
 from datetime import datetime, timezone
 from contextlib import suppress
 from pathlib import Path
@@ -29,14 +27,6 @@ app = FastAPI(title="BOINGUS Local Admin")
 app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
 clients: set[WebSocket] = set()
 sync_task = None
-
-# Player search index is cached locally in memory to avoid querying PlayFab on
-# every keystroke. Set PLAYFAB_ALL_PLAYERS_SEGMENT_ID in .env to override
-# automatic detection of the "All Players" segment.
-player_index = []
-player_index_loaded_at = 0.0
-player_index_lock = asyncio.Lock()
-PLAYER_INDEX_TTL = 300
 
 @app.on_event("startup")
 async def startup():
@@ -69,8 +59,7 @@ async def report_sync_loop():
                     try:
                         report = json.loads(raw)
                         if report.get("reportID") and report.get("targetPlayFabID"):
-                            database.save_report(report)
-                            changed = True
+                            changed = database.save_report(report) or changed
                     except (TypeError, ValueError):
                         continue
                 if changed:
@@ -102,9 +91,10 @@ async def reports(limit: int = 100):
 async def ingest_local_report(payload: dict):
     if not payload.get("reportID") or not payload.get("targetPlayFabID"):
         raise HTTPException(400, "Report is missing its ID or target PlayFab ID.")
-    database.save_report(payload)
-    await broadcast({"type": "reports_changed"})
-    return {"ok": True}
+    changed = database.save_report(payload)
+    if changed:
+        await broadcast({"type": "reports_changed"})
+    return {"ok": True, "changed": changed}
 
 @app.get("/api/player/{playfab_id}")
 async def player(playfab_id: str):
@@ -134,86 +124,6 @@ async def player(playfab_id: str):
     except PlayFabError as exc:
         raise HTTPException(502, str(exc))
 
-
-def _profile_values(profile: dict):
-    if not isinstance(profile, dict):
-        return None
-    account = profile.get("PlayerProfile") or profile.get("Profile") or profile
-    title_info = account.get("TitleInfo") or {}
-    player_id = profile.get("PlayerId") or profile.get("PlayFabId") or account.get("PlayerId") or account.get("PlayFabId")
-    if not player_id:
-        return None
-    return {
-        "playFabId": str(player_id),
-        "displayName": account.get("TitleDisplayName") or account.get("DisplayName") or title_info.get("DisplayName") or account.get("Username") or "Unknown",
-        "username": account.get("Username") or "",
-        "created": title_info.get("Created") or account.get("Created") or "",
-        "lastLogin": title_info.get("LastLogin") or "",
-        "isBanned": bool(title_info.get("isBanned", False))
-    }
-
-
-async def _load_player_index(force=False):
-    global player_index, player_index_loaded_at
-    now = asyncio.get_running_loop().time()
-    if not force and player_index_loaded_at and now - player_index_loaded_at < PLAYER_INDEX_TTL:
-        return player_index
-    async with player_index_lock:
-        now = asyncio.get_running_loop().time()
-        if not force and player_index_loaded_at and now - player_index_loaded_at < PLAYER_INDEX_TTL:
-            return player_index
-        configured_segment = os.getenv("PLAYFAB_ALL_PLAYERS_SEGMENT_ID", "").strip()
-        if configured_segment:
-            segment_id = configured_segment
-        else:
-            segments_result = await pf.get_all_segments()
-            segments = segments_result.get("Segments", []) or []
-            all_players = next((s for s in segments if str(s.get("Name", "")).strip().lower() == "all players"), None)
-            if not all_players:
-                raise PlayFabError('Could not find a PlayFab segment named "All Players". Create/enable that segment or set PLAYFAB_ALL_PLAYERS_SEGMENT_ID in .env.')
-            segment_id = all_players.get("Id")
-        if not segment_id:
-            raise PlayFabError("The All Players segment did not contain a segment ID.")
-        fresh, token = [], None
-        for _ in range(20):
-            page = await pf.get_players_in_segment(segment_id, token, 10000)
-            for profile in page.get("PlayerProfiles", []) or []:
-                normalized = _profile_values(profile)
-                if normalized:
-                    fresh.append(normalized)
-            token = page.get("ContinuationToken")
-            if not token:
-                break
-        player_index = fresh
-        player_index_loaded_at = asyncio.get_running_loop().time()
-        return player_index
-
-
-@app.get("/api/player-search")
-async def player_search(q: str):
-    q = q.strip()
-    if len(q) < 3:
-        raise HTTPException(400, "Type at least 3 characters to search.")
-    try:
-        if len(q) >= 16 and re.fullmatch(r"[A-Za-z0-9-]+", q):
-            result = await pf.get_account(playfab_id=q)
-            info = result.get("UserInfo") or result.get("AccountInfo") or {}
-            title = info.get("TitleInfo") or {}
-            return {"results": [{
-                "playFabId": info.get("PlayFabId", q),
-                "displayName": title.get("DisplayName") or info.get("Username") or "Unknown",
-                "username": info.get("Username") or "",
-                "created": title.get("Created") or info.get("Created") or "",
-                "lastLogin": title.get("LastLogin") or "",
-                "isBanned": bool(title.get("isBanned", False))
-            }]}
-        index = await _load_player_index()
-        needle = q.casefold()
-        matches = [p for p in index if needle in p["playFabId"].casefold()
-                   or needle in p["displayName"].casefold() or needle in p["username"].casefold()]
-        return {"results": matches[:25], "total_cached": len(index)}
-    except PlayFabError as exc:
-        raise HTTPException(502, str(exc))
 
 class NoteRequest(BaseModel):
     note: str = Field(min_length=1, max_length=2000)
