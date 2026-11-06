@@ -1,7 +1,5 @@
 const $ = (id) => document.getElementById(id);
 let socket;
-let playerSearchTimer = null;
-let playerSearchRequest = 0;
 
 function setPage(name, title) {
   document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
@@ -84,46 +82,31 @@ async function loadCatalog() {
 }
 $("load-catalog").addEventListener("click", loadCatalog);
 $("refresh-home").addEventListener("click", loadHome);
-function renderPlayerMatches(results) {
-  const host = $("player-results");
-  if (!results.length) { host.innerHTML = '<div class="search-empty">No matching accounts found.</div>'; return; }
-  host.innerHTML = results.map(p => `
-    <button class="player-match" type="button" data-player-id="${escapeHtml(p.playFabId)}">
-      <span class="player-match-main"><b>${escapeHtml(p.displayName || "Unknown")}</b><small>${escapeHtml(p.playFabId)}</small></span>
-      <span class="tag">${p.isBanned ? "Banned" : "Account"}</span>
-      <span class="match-open">View full information →</span>
-    </button>`).join("");
-  host.querySelectorAll(".player-match").forEach(btn => btn.addEventListener("click", () => {
-    $("player-query").value = btn.dataset.playerId;
-    host.innerHTML = "";
-    openPlayerDetail(btn.dataset.playerId);
-  }));
-}
-
-async function searchPlayers() {
-  const q = $("player-query").value.trim(), host = $("player-results");
-  const requestId = ++playerSearchRequest;
-  if (q.length < 3) { host.innerHTML = q.length ? '<div class="search-empty">Type at least 3 characters.</div>' : ""; return; }
-  host.innerHTML = '<div class="search-empty">Searching PlayFab accounts…</div>';
-  try {
-    const d = await api("/api/player-search?q=" + encodeURIComponent(q));
-    if (requestId === playerSearchRequest) renderPlayerMatches(d.results || []);
-  } catch(e) {
-    if (requestId === playerSearchRequest) host.innerHTML = `<div class="search-error">${escapeHtml(e.message)}</div>`;
+async function openPlayerDetail(id) {
+  const cleanId = String(id || "").trim();
+  if (!/^[A-Za-z0-9-]{16,}$/.test(cleanId)) {
+    $("player-lookup-status").textContent = "Enter the complete PlayFab ID (at least 16 characters).";
+    return;
   }
-}
 
-function openPlayerDetail(id) {
+  setPage("lookup", "User Lookup");
+  $("player-query").value = cleanId;
   $("player-search-view").hidden = true;
   $("player-detail-view").hidden = false;
   $("player-result").innerHTML = '<div class="empty-state">Loading full player information…</div>';
-  loadPlayerProfile(id);
   window.scrollTo({top: 0, behavior: "smooth"});
+  await loadPlayerProfile(cleanId);
 }
+
+$("player-lookup-form").addEventListener("submit", async e => {
+  e.preventDefault();
+  await openPlayerDetail($("player-query").value);
+});
 
 $("player-back").addEventListener("click", () => {
   $("player-detail-view").hidden = true;
   $("player-search-view").hidden = false;
+  $("player-lookup-status").textContent = "";
   window.scrollTo({top: 0, behavior: "smooth"});
 });
 
@@ -195,14 +178,6 @@ async function loadPlayerProfile(id) {
   } catch(e) { result.innerHTML = `<div class="search-error">${escapeHtml(e.message)}</div>`; }
 }
 
-$("player-search").addEventListener("click", searchPlayers);
-$("player-query").addEventListener("input", () => {
-  clearTimeout(playerSearchTimer);
-  playerSearchTimer = setTimeout(searchPlayers, 300);
-});
-$("player-query").addEventListener("keydown", e => {
-  if (e.key === "Enter") { e.preventDefault(); clearTimeout(playerSearchTimer); searchPlayers(); }
-});
 
 function connectSocket() {
   const scheme = location.protocol === "https:" ? "wss" : "ws";
